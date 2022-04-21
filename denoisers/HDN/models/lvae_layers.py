@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from denoisers.HDN.lib.nn import ResidualBlock, ResidualGatedBlock
-from denoisers.HDN.lib.stochastic import NormalStochasticBlock2d
+from lib.nn import ResidualBlock, ResidualGatedBlock
+from lib.stochastic import NormalStochasticBlock2d
 
 
 class TopDownLayer(nn.Module):

@@ -85,10 +85,15 @@ class NoiseModelLikelihood(LikelihoodModule):
     def log_likelihood(self, x, params):
         predicted_s_denormalized = params['mean'] * self.data_std + self.data_mean
         x_denormalized = x * self.data_std + self.data_mean
+        predicted_s_cloned = predicted_s_denormalized
+        predicted_s_reduced = predicted_s_cloned.permute(1,0,2,3)
 
-        self.noiseModel.eval()
-        logprob=self.noiseModel.loglikelihood(x_denormalized, predicted_s_denormalized)
+        x_cloned = x_denormalized
+        x_cloned = x_cloned.permute(1,0,2,3)
+        x_reduced = x_cloned[0,...]
 
+        likelihoods=self.noiseModel.likelihood(x_reduced,predicted_s_reduced)
+        logprob=torch.log(likelihoods)
         return logprob
     
     

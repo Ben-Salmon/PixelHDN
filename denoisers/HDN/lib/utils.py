@@ -4,9 +4,8 @@ import time
 from torch import nn
 from tqdm import tqdm
 from glob import glob
-from matplotlib import pyplot as plt
 from sklearn.feature_extraction import image
-
+from matplotlib import pyplot as plt
 
 class Interpolate(nn.Module):
     """Wrapper for torch.nn.functional.interpolate."""
@@ -125,7 +124,7 @@ def augment_data(X_train):
 
     print('Raw image size after augmentation', X_train_aug.shape)
     return X_train_aug
-    
+
 def extract_patches(x,patch_size,num_patches):
     """Deterministically extract patches from array of images. 
     Parameters

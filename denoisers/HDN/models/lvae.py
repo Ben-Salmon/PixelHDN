@@ -1,28 +1,22 @@
 import numpy as np
 import torch
 from torch import nn
-from torch import optim
 
-from pytorch_lightning import LightningModule
-
-from denoisers.HDN.lib.likelihoods import (GaussianLikelihood,
+from lib.likelihoods import (GaussianLikelihood,
                              NoiseModelLikelihood)
-from denoisers.HDN.lib.utils import (crop_img_tensor, pad_img_tensor, Interpolate, free_bits_kl)
-from denoisers.HDN.models.lvae_layers import (TopDownLayer, BottomUpLayer,
+from lib.utils import (crop_img_tensor, pad_img_tensor, Interpolate, free_bits_kl)
+from .lvae_layers import (TopDownLayer, BottomUpLayer,
                           TopDownDeterministicResBlock,
                           BottomUpDeterministicResBlock)
 
 
-class LadderVAE(LightningModule):
+class LadderVAE(nn.Module):
 
     def __init__(self,
-                 z_dims,               
+                 z_dims,
+                 device,                 
                  data_mean,
                  data_std,
-                 #virtual_batch,
-                 #lr,
-                 #weight_decay,
-                 device,
                  color_ch=1,
                  noiseModel=None,
                  blocks_per_layer=5,
@@ -42,10 +36,6 @@ class LadderVAE(LightningModule):
                  mode_pred=False,
                  use_uncond_mode_at=[]):
         super().__init__()
-        self.save_hyperparameters()
-        #self.virtual_batch = virtual_batch
-        #self.lr = lr
-        #self.weight_decay = weight_decay
         self.color_ch = color_ch
         self.z_dims = z_dims
         self.blocks_per_layer = blocks_per_layer
@@ -58,8 +48,9 @@ class LadderVAE(LightningModule):
         self.img_shape = tuple(img_shape)
         self.res_block_type = res_block_type
         self.gated = gated
-        self.data_mean = torch.Tensor([data_mean]).to(device)
-        self.data_std = torch.Tensor([data_std]).to(device)
+        self.device = device
+        self.data_mean = torch.Tensor([data_mean]).to(self.device)
+        self.data_std = torch.Tensor([data_std]).to(self.device)
         self.noiseModel = noiseModel
         self.mode_pred=mode_pred
         self.use_uncond_mode_at=use_uncond_mode_at
@@ -186,7 +177,7 @@ class LadderVAE(LightningModule):
         else:
             msg = "Unrecognized likelihood '{}'".format(likelihood_form)
             raise RuntimeError(msg)
-    
+            
     def increment_global_step(self):
         """Increments global step by 1."""
         self._global_step += 1
@@ -409,74 +400,3 @@ class LadderVAE(LightningModule):
         c = self.z_dims[-1] * 2  # mu and logvar
         top_layer_shape = (n_imgs, c, h, w)
         return top_layer_shape
-
-    def training_step(self, batch, batch_idx):
-        x = (batch - self.data_mean) / self.data_std
-        ### Make smaller batches
-        virtual_batches = torch.split(x, self.virtual_batch, 0)
-        for batch in virtual_batches:
-            model_out = self.forward(x)
-            
-            recons_sep = -model_out['ll']
-            kl_loss = model_out['kl_loss']/float(x.shape[2]*x.shape[3])
-                
-            recons_loss = recons_sep.mean()
-            
-            output = {
-                'recons_loss': recons_loss,
-                'kl_loss': kl_loss,
-                'out_mean': model_out['out_mean'],
-                'out_sample': model_out['out_sample']
-                    }
-                
-            if 'kl_avg_layerwise' in model_out:
-                output['kl_avg_layerwise'] = model_out['kl_avg_layerwise']
-                
-            recons_loss = output['recons_loss']
-            kl_loss = output['kl_loss']
-            loss = recons_loss + kl_loss
-            
-            self.log("train_elbo", loss)
-            return loss
-
-    def validation_step(self, batch, batch_idx):
-        x = (batch - self.data_mean) / self.data_std
-        ### Make smaller batches
-        virtual_batches = torch.split(x, self.virtual_batch, 0)
-        for batch in virtual_batches:
-            model_out = self.forward(x)
-            
-            recons_sep = -model_out['ll']
-            kl_loss = model_out['kl_loss']/float(x.shape[2]*x.shape[3])
-                
-            recons_loss = recons_sep.mean()
-            
-            output = {
-                'recons_loss': recons_loss,
-                'kl_loss': kl_loss,
-                'out_mean': model_out['out_mean'],
-                'out_sample': model_out['out_sample']
-                    }
-                
-            if 'kl_avg_layerwise' in model_out:
-                output['kl_avg_layerwise'] = model_out['kl_avg_layerwise']
-                
-            recons_loss = output['recons_loss']
-            kl_loss = output['kl_loss']
-            loss = recons_loss + kl_loss
-            
-            self.log("val_elbo", loss)
-            
-    def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10,
-                                                                 factor=0.5, min_lr=1e-12, verbose=True),
-                "monitor": "val_elbo",
-                "frequency": 1
-                # If "monitor" references validation metrics, then "frequency" should be set to a
-                # multiple of "trainer.check_val_every_n_epoch".
-            },
-        }

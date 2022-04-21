@@ -18,9 +18,9 @@ from tifffile import imread
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from denoisers.HDN.boilerplate import boilerplate
-from denoisers.HDN.models.lvae import LadderVAE
-import denoisers.HDN.lib.utils as utils
+from boilerplate import boilerplate
+from models.lvae import LadderVAE
+import lib.utils as utils
 
 
 def train_network(model, lr, max_epochs,steps_per_epoch,train_loader, val_loader, test_loader, 
