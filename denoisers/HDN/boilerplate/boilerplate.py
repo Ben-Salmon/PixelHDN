@@ -1,25 +1,13 @@
 import numpy as np
-import math
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import TensorDataset
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 from torchvision.utils import save_image
-from torch.nn import init
 from torch.optim.optimizer import Optimizer
 import os
-import glob
-import random
-from tifffile import imread
-from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from models.lvae import LadderVAE
-import lib.utils as utils
-
-def _make_datamanager(train_images, val_images, test_images, batch_size, test_batch_size):
+def _make_datamanager(train_images, val_images, test_images, batch_size, test_batch_size, data_mean, data_std):
     
     """Create data loaders for training, validation and test sets during training.
     The test set will simply be used for plotting and comparing generated images 
@@ -44,9 +32,6 @@ def _make_datamanager(train_images, val_images, test_images, batch_size, test_ba
     np.random.shuffle(val_images)
     val_images = val_images
     
-    combined_data = np.concatenate((train_images, val_images), axis=0)
-    data_mean = np.mean(combined_data)
-    data_std = np.std(combined_data)
     train_images = (train_images-data_mean)/data_std
     train_images = torch.from_numpy(train_images)
     train_labels = torch.zeros(len(train_images),).fill_(float('nan'))

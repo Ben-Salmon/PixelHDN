@@ -1,9 +1,7 @@
 import torch
 import numpy as np
-import time
 from torch import nn
 from tqdm import tqdm
-from glob import glob
 from sklearn.feature_extraction import image
 from matplotlib import pyplot as plt
 

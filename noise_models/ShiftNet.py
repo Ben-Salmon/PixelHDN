@@ -76,24 +76,24 @@ class ShiftNet(AutoRegressiveGMM):
     @staticmethod
     def weight_init(m):
         if isinstance(m, nn.Conv2d):
-            init.xavier_normal(m.weight)
-            init.constant(m.bias, 0)
+            init.xavier_normal_(m.weight)
+            init.constant_(m.bias, 0)
 
     def reset_params(self):
         for i, m in enumerate(self.modules()):
             self.weight_init(m)                     
             
-    def forward(self, x):
+    def forward(self, n):
         rf = self.rf
         rfh = rf//2 +1
-        patchSize = x.shape[-1]
-        x = torch.nn.functional.pad(x, (rf,rf,rf,rf),value = 5)
+        patchSize = n.shape[-1]
+        n = torch.nn.functional.pad(n, (rf,rf,rf,rf),value = 5)
 
 
         for i, module in enumerate(self.convs[:-1]):
-            x = module(x)
+            n = module(n)
             if i < (self.depth-2):
-                x = F.relu(x)
+                n = F.relu(n)
   
         medium = rf
         low = medium - rfh
@@ -101,25 +101,25 @@ class ShiftNet(AutoRegressiveGMM):
         
         # These are differently shifted versions of the output
         # We can concatenate them to produce different receptive fields
-        wa = x[...,low:low+patchSize, medium:medium+patchSize]
-        wb = x[...,high:high+patchSize, medium:medium+patchSize]
-        wc = x[...,medium:medium+patchSize, low:low+patchSize]
-        wd = x[...,medium:medium+patchSize, high:high+patchSize]
+        wa = n[...,low:low+patchSize, medium:medium+patchSize]
+        wb = n[...,high:high+patchSize, medium:medium+patchSize]
+        wc = n[...,medium:medium+patchSize, low:low+patchSize]
+        wd = n[...,medium:medium+patchSize, high:high+patchSize]
         
-        wll = x[...,low:low+patchSize, low:low+patchSize]
-        wlh = x[...,low:low+patchSize, high:high+patchSize]
-        whl = x[...,high:high+patchSize, low:low+patchSize]
-        whh = x[...,high:high+patchSize, high:high+patchSize]
+        wll = n[...,low:low+patchSize, low:low+patchSize]
+        wlh = n[...,low:low+patchSize, high:high+patchSize]
+        whl = n[...,high:high+patchSize, low:low+patchSize]
+        whh = n[...,high:high+patchSize, high:high+patchSize]
         
-        wu = x[...,medium-rfh:medium-rfh+patchSize, medium:medium+patchSize]
+        wu = n[...,medium-rfh:medium-rfh+patchSize, medium:medium+patchSize]
         
 
         # Here we concatenate the different versions of the output
-#        x = torch.cat((wc,wc),1)
-        x = wc
-        x = self.convs[-1](x)
+#        n = torch.cat((wc,wc),1)
+        n = wc
+        n = self.convs[-1](n)
 
-        return x
+        return n
 
 
     def configure_optimizers(self):

@@ -1,9 +1,4 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
-from torch.nn import init
 import numpy as np
 import pytorch_lightning as pl
 from tqdm import tqdm
@@ -26,19 +21,47 @@ class AutoRegressiveGMM(pl.LightningModule):
         weights = weights / torch.sum(weights,dim = 1, keepdim = True)
         return means, stds, weights
     
-    def calc_likelihood(self, x):
-        # Gaussian likelihood function
-        pred = self.forward(x)
-        means, stds, weights = self.get_gaussian_params(pred)
+    def normalDens(self, x, mu, sigma):
+        pi = torch.tensor([np.pi]).to(self.device)
+        p = (x-mu)**2
+        p = p / (2.0*sigma**2)
+        p = torch.exp(p)
+        p = p / torch.sqrt((2.0*pi)*sigma**2)
+        return torch.log(p)
+    
+    def likelihood(self, x, means, stds, weights, n_gaussians):
+        p=torch.zeros_like(x)
+        p=torch.repeat_interleave(x, n_gaussians, dim=1)
+        for gaussian in range(n_gaussians):
+            p=self.normalDens(x, means[:,gaussian], stds[:,gaussian]) * weights[:,gaussian]
+        return p+1e-10
+       
+    def vaeloglikelihood(self, x, s=None):
+        if s is None:
+            s = self.mean
+        # Separate noise from signal and normalise
         
-        likelihoods= -0.5*((means-x)/stds)**2 - torch.log(stds) -np.log(2.0*np.pi)*0.5
+        x = x - self.mean
+        s = s - self.mean
+        
+        x = x / self.std
+        s = s / self.std
+        
+        n = x - s
+        
+        if self.training:
+            pred = self.forward(n)
+        else:
+            pred = self.forward(n).detach()
+            
+        means, stds, weights = self.get_gaussian_params(pred)
+        likelihoods= 0.5*((means-n)/stds)**2 - torch.log(stds) -np.log(2.0*np.pi)*0.5
         temp = torch.max(likelihoods, dim = 1, keepdim = True)[0].detach()
         likelihoods=torch.exp( likelihoods -temp) * weights
-        loglikelihoods = torch.log(torch.sum(likelihoods, dim = 1, keepdim = True) )
-        loglikelihoods = loglikelihoods + torch.exp(temp)
-        
-        loss= torch.mean( loglikelihoods)
-        return loss    
+#        likelihoods=torch.exp( likelihoods) * weights
+        loglikelihoods = torch.log(torch.sum(likelihoods, dim = 1, keepdim = True))
+        loglikelihoods = loglikelihoods + temp 
+        return loglikelihoods    
     
     def loglikelihood(self, x, s=None):
         if s is None:
@@ -120,7 +143,6 @@ class AutoRegressiveGMM(pl.LightningModule):
 
         return img*self.std +self.mean
     
-    
     def training_step(self, batch, batch_idx):
         loss = -torch.mean(self.loglikelihood(batch))
         self.log("train_nll", loss)
@@ -131,5 +153,6 @@ class AutoRegressiveGMM(pl.LightningModule):
         self.log("val_nll", loss)
 
     def test_step(self, batch, batch_idx):
+        (x, s) = batch
         loss = -torch.mean(self.loglikelihood(batch))
         self.log("test_nll", loss)

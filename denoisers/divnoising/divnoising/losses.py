@@ -62,8 +62,12 @@ def recoLoss(predicted_s, x, data_mean, data_std, noiseModel):
     predicted_s_denormalized = predicted_s * data_std + data_mean
     x_denormalized = x * data_std + data_mean
     
-    noiseModel.eval()
-    return -noiseModel.loglikelihood(x_denormalized, predicted_s_denormalized)
+#    with torch.no_grad():
+#        logprob = noiseModel.loglikelihood(x_denormalized, predicted_s_denormalized)
+    
+    logprob = noiseModel.loglikelihood(x_denormalized, predicted_s_denormalized)
+
+    return -torch.sum(logprob)
     
 def loss_fn(predicted_s, x, mu, logvar, gaussian_noise_std, data_mean, data_std, noiseModel):
     """Compute DivNoising loss. 

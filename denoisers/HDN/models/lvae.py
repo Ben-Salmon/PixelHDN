@@ -2,10 +2,10 @@ import numpy as np
 import torch
 from torch import nn
 
-from lib.likelihoods import (GaussianLikelihood,
+from denoisers.HDN.lib.likelihoods import (GaussianLikelihood,
                              NoiseModelLikelihood)
-from lib.utils import (crop_img_tensor, pad_img_tensor, Interpolate, free_bits_kl)
-from .lvae_layers import (TopDownLayer, BottomUpLayer,
+from denoisers.HDN.lib.utils import (crop_img_tensor, pad_img_tensor, Interpolate, free_bits_kl)
+from denoisers.HDN.models.lvae_layers import (TopDownLayer, BottomUpLayer,
                           TopDownDeterministicResBlock,
                           BottomUpDeterministicResBlock)
 
@@ -51,14 +51,13 @@ class LadderVAE(nn.Module):
         self.device = device
         self.data_mean = torch.Tensor([data_mean]).to(self.device)
         self.data_std = torch.Tensor([data_std]).to(self.device)
-        self.noiseModel = noiseModel
         self.mode_pred=mode_pred
         self.use_uncond_mode_at=use_uncond_mode_at
         self._global_step = 0
         
         assert(self.data_std is not None)
         assert(self.data_mean is not None)
-        if self.noiseModel is None:
+        if noiseModel is None:
             self.likelihood_form = "gaussian"
         else:
             self.likelihood_form = "noise_model"
