@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 .idea
 
+*DS_Store
+._*
+
 data/results/
 dn_checkpoint/
 nm_checkpoint/
@@ -17,6 +20,7 @@ jobs/
 *.h5
 *.zip
 *.tar
+*.db
 *.tfevents.*
 config.json
 

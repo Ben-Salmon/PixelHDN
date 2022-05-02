@@ -5,11 +5,11 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
-from noise_models.AutoRegressiveGMM import AutoRegressiveGMM
+from noise_models.GMM import GMM
 import torch.optim as optim
 #import pytorch_lightning as pl
 
-class ShiftNet(AutoRegressiveGMM):
+class ShiftNet(GMM):
     """ A conv-net that shifts it's output to modify the receptive field of ouput pixels
 
     """
@@ -20,7 +20,8 @@ class ShiftNet(AutoRegressiveGMM):
                  num_filters=128,
                  kernel_size=7,
                  num_gaussians=10,
-                 mean=0, std=1):
+                 mean=0, std=1,
+                 signal_dep=False):
         """
         Arguments:
             in_channels: int, number of channels in the input tensor.
@@ -33,7 +34,7 @@ class ShiftNet(AutoRegressiveGMM):
                 upsampling.
         """
         self.save_hyperparameters()
-        super().__init__(mean, std, num_gaussians)
+        super().__init__(mean, std, num_gaussians, signal_dep)
         
         
         
@@ -83,7 +84,7 @@ class ShiftNet(AutoRegressiveGMM):
         for i, m in enumerate(self.modules()):
             self.weight_init(m)                     
             
-    def forward(self, n):
+    def forward(self, n, s):
         rf = self.rf
         rfh = rf//2 +1
         patchSize = n.shape[-1]
