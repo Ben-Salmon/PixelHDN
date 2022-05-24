@@ -1,14 +1,15 @@
+'''
 from tifffile import imsave
 from scipy.io import loadmat
+import numpy as np
 
-fig1 = loadmat('../data/images/fig1.mat')['sensor_data']    
+fig1 = loadmat('../data/images/fig1.mat')['sensor_data']
     
-noise = fig1[...,500:]
-observation = fig1[...,30:500]
+noise = np.transpose(fig1[:128,:128,500:], (2, 0, 1))
+observation = np.transpose(fig1[:128,:128,32:500], (2, 0, 1))
 
-imsave('../data/noise.tif', noise)
-imsave('../data/observation.tif', observation)
-'''
+imsave('../data/PAI/noise.tif', noise)
+imsave('../data/PAI/observation.tif', observation)
 
 from tifffile import imread, imsave
 import numpy as np
@@ -16,20 +17,26 @@ from scipy.ndimage import gaussian_filter
 import sys
 sys.path.append('../')
 
-signal = imread('../data/signal.tif')
-
 noise = (np.random.randn(2486,256,256)).astype(np.float32)
-noise = gaussian_filter(noise, (0,2,10))*100
-noise = noise + np.random.randn(2486,256,256)*25
+noise = gaussian_filter(noise, (0,1,5))*110
+noise = noise + np.random.randn(2486,256,256)*20
 noise = noise-noise.mean()
+
+signal = imread('../data/MRI/signal.tif')
 
 observation = signal + noise
 
+imsave('../data/MRI/observation.tif', observation)
+imsave('../data/MRI/noise.tif', noise)
+'''
+from tifffile import imread, imsave
+import numpy as np
+
+observation = imread('../data/flower.tif')[:,np.newaxis,...]
+
+signal = np.mean(observation, axis=0)[np.newaxis]
+
 noise = observation - signal
 
-imsave('../data/observation.tif', observation)
-imsave('../data/observation_sample.tif', observation[2])
-imsave('../data/signal_sample.tif', signal[2])
-imsave('../data/noise.tif', noise)
-imsave('../data/noise_sample.tif', noise[2])
-'''
+imsave('../data/Convallaria/observation.tif', observation.astype(np.float))
+imsave('../data/Convallaria/noise.tif', noise.astype(np.float))

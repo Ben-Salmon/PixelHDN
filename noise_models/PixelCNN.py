@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import init
 import torch.optim as optim
-from  noise_models.GMM import GMM
+from noise_models.GMM import GMM
 import torch.nn.functional as F
 
 class MaskedConvolution(nn.Module):
@@ -60,39 +60,24 @@ class HorizontalStackConvolution(MaskedConvolution):
         super().__init__(in_channels, out_channels, mask, **kwargs)
 
 class GatedConv(nn.Module):
-    def __init__(self, num_filters, kernel_size, signal_dep, **kwargs):
+    def __init__(self, num_filters, kernel_size, **kwargs):
         super().__init__()
         self.kernel_size = kernel_size
-        self.signal_dep = signal_dep
         self.v_conv = VerticalStackConvolution(num_filters, 2*num_filters, kernel_size, **kwargs)
         self.v_conv_1x1 = nn.Conv2d(2*num_filters, 2*num_filters, 1)
         self.h_conv = HorizontalStackConvolution(num_filters, 2*num_filters, kernel_size, **kwargs)
         self.h_conv_1x1 = nn.Conv2d(num_filters, num_filters, 1)
-        if signal_dep:
-            self.v_s_conv = nn.Conv2d(num_filters, 2*num_filters, kernel_size, padding=kernel_size//2)
-            self.h_s_conv = nn.Conv2d(num_filters, 2*num_filters, kernel_size, padding=kernel_size//2)
-
-    def forward(self, x_v, x_h, s):
-        # Signal convolutions
-        if self.signal_dep:
-            s_v = self.v_s_conv(s)
-            s_h = self.h_s_conv(s)
-            s_v_tan, s_v_sig = s_v.chunk(2, dim=1)
-            s_h_tan, s_h_sig = s_h.chunk(2, dim=1)
         
+    def forward(self, x_v, x_h):
         # Vertical stack
         v_stack_feat = self.v_conv(x_v)
         v_tan, v_sig = v_stack_feat.chunk(2, dim=1)
-        if self.signal_dep:
-            v_tan, v_sig = v_tan + s_v_tan, v_sig + s_v_sig
         v_stack_out = torch.tanh(v_tan) * torch.sigmoid(v_sig)
         
         # Horizontal stack
         h_stack_feat = self.h_conv(x_h)
         h_stack_feat = h_stack_feat + self.v_conv_1x1(v_stack_feat)
         h_tan, h_sig = h_stack_feat.chunk(2, dim=1)
-        if self.signal_dep:
-            h_tan, h_sig = h_tan + s_h_tan, h_sig + s_h_sig
         h_stack_out = torch.tanh(h_tan) * torch.sigmoid(h_sig)
         h_stack_out = self.h_conv_1x1(h_stack_out)
         h_stack_out = h_stack_out + x_h
@@ -110,30 +95,26 @@ class PixelCNN(GMM):
                  num_filters=128,
                  kernel_size=7,
                  num_gaussians=10,
-                 mean=0, std=1,
-                 signal_dep=True):
+                 data_mean=0, 
+                 data_std=1):
         """
         Arguments:
             colour_channels: int, number of channels in the input tensor.
-            depth: int, number of convolutional layers.
+            depth: int>=2, number of convolutional layers.
             num_filters: int, number of convolutional filters.
-            kernel_size: int, side length of kernel
+            kernel_size: int, side length of kernel, should be 3,7,11,15,...
             num_gaussians: int, number of components in GMM.
             mean: float, mean of entire noisy dataset.
             std: positive float, std of entire noisy dataset.
-            signal_dep: bool, whether noise is signal dependent
         """
         self.save_hyperparameters()
-        super().__init__(mean, std, num_gaussians, signal_dep)
+        super().__init__(data_mean, data_std, num_gaussians)
         self.depth = depth
-        self.signal_dep = signal_dep
         out_channels = colour_channels * num_gaussians * 3
         
         self.v_inconv = VerticalStackConvolution(colour_channels, num_filters, kernel_size, mask_center=True)
         self.h_inconv = HorizontalStackConvolution(colour_channels, num_filters, kernel_size, mask_center=True)
-        if signal_dep:
-            self.s_inconv = nn.Conv2d(colour_channels, num_filters, 1)
-        self.gatedconvs = nn.ModuleList([GatedConv(num_filters, kernel_size, signal_dep)] * depth)
+        self.gatedconvs = nn.ModuleList([GatedConv(num_filters, kernel_size)] * depth)
         self.outconv = nn.Conv2d(num_filters, out_channels, 1)
         
         self.reset_params()
@@ -148,13 +129,11 @@ class PixelCNN(GMM):
         for i, m in enumerate(self.modules()):
             self.weight_init(m)                     
             
-    def forward(self, x, s):
+    def forward(self, x):#, s):
         x_v = self.v_inconv(x)
         x_h = self.h_inconv(x)
-        if self.signal_dep:
-            s = self.s_inconv(s)
         for layer in self.gatedconvs:
-            x_v, x_h = layer(x_v, x_h, s)
+            x_v, x_h = layer(x_v, x_h)
         out = self.outconv(F.elu(x_h))
         
         return out

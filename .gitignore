@@ -1,14 +1,33 @@
-__pycache__/
+*__pycache__
 *.py[cod]
 .idea
 
-*DS_Store
-._*
+*final_params.ckpt
+*.ipynb_checkpoints
 
-data/results/
-dn_checkpoint/
-nm_checkpoint/
-jobs/
+*DS_Store
+*._*
+
+data/images
+data/brain
+
+dn_checkpoint/Convallaria/PixelHDN
+dn_checkpoint/MRI/HDN/natural/
+dn_checkpoint/MRI/HDN/structured/
+dn_checkpoint/MRI/PixelHDN/HDN
+dn_checkpoint/PAI/HDN/natural/
+dn_checkpoint/PAI/HDN/structured/
+dn_checkpoint/PAI/PixelHDN/HDN
+
+jobs
+
+nm_checkpoint/Convallaria/
+nm_checkpoint/MRI
+nm_checkpoint/PAI
+
+results/Convallaria/
+results/PAI/
+results/MRI/
 
 *.net
 *.ckpt
@@ -21,6 +40,9 @@ jobs/
 *.zip
 *.tar
 *.db
+*.out
+*.stats
+*.txt
 *.tfevents.*
 config.json
 

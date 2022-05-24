@@ -14,38 +14,35 @@ from noise_models.PixelCNN import PixelCNN
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-observation = imread('../data/observation.tif')
+observation = imread('../data/Convallaria/observation.tif')
 
 transform = transforms.RandomCrop(64)
-train_loader, val_loader, data_mean, data_std, img_shape = create_dn_loader(observation, transform=transform)
-del(observation)
+train_loader, val_loader, data_mean, data_std, img_shape = create_dn_loader(observation, batch_size=8, split=0.9, transform=transform)
 
-noiseModel = PixelCNN.load_from_checkpoint('../nm_checkpoint/final_params.ckpt').to(device).eval()
+noiseModel = PixelCNN.load_from_checkpoint('../nm_checkpoint/Convallaria/final_params.ckpt').to(device).eval()
 for param in noiseModel.parameters():
     param.requires_grad = False
     
 lr=3e-4
 num_latents = 5
 z_dims = [32]*int(num_latents)
-free_bits = 1.0
+free_bits = 0.5
 
-model = LadderVAE(z_dims=z_dims,               
-                  data_mean=data_mean,
-                  data_std=data_std,
-                  noiseModel=noiseModel,
-                  free_bits=free_bits,
-                  img_shape=img_shape,
-                  img_folder='../dn_checkpoint/imgs',
-                  lr=lr).to(device)
+model = LadderVAE(z_dims=z_dims,
+                   data_mean=data_mean,
+                   data_std=data_std,
+                   noiseModel=noiseModel,
+                   img_shape=img_shape,
+                   img_folder='../dn_checkpoint/Convallaria/imgs').to(device)
 
-checkpoint_path = '../dn_checkpoint'
+checkpoint_path = '../dn_checkpoint/Convallaria/PixelHDN'
 trainer = pl.Trainer(default_root_dir=os.path.join(checkpoint_path, "HDN"),
                      gpus=1 if str(device).startswith("cuda") else 0,
-                     max_epochs=2000,
+                     max_epochs=12000,
                      logger=False,
                      gradient_clip_val=0,
-                     callbacks=[ModelCheckpoint(save_weights_only=False, mode="min", monitor="val_elbo"),
-                                EarlyStopping('val_elbo', patience=30)])
+                     callbacks=[ModelCheckpoint(save_weights_only=False, mode="min", monitor="val_elbo", every_n_epochs=50),
+                                EarlyStopping('val_elbo', patience=12000)])
 
 trainer.fit(model, train_loader, val_loader)
-trainer.save_checkpoint('../dn_checkpoint/final_params.ckpt')
+trainer.save_checkpoint('../dn_checkpoint/Convallaria/PixelHDN/final_params.ckpt')

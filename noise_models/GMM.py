@@ -1,16 +1,20 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+from collections import OrderedDict
+from torch.nn import init
 import numpy as np
 import pytorch_lightning as pl
 from tqdm import tqdm
 import sys
 
 class GMM(pl.LightningModule):
-    def __init__(self, mean, std, num_gaussians, signal_dep):
+    def __init__(self, data_mean, data_std, num_gaussians):
         super().__init__()  
-        self.mean = mean
-        self.std = std
+        self.data_mean = data_mean
+        self.data_std = data_std
         self.num_gaussians = num_gaussians
-        self.signal_dep = signal_dep
         
     def get_gaussian_params(self, pred):
         blockSize = self.num_gaussians
@@ -18,23 +22,27 @@ class GMM(pl.LightningModule):
         stds = torch.sqrt(torch.exp(pred[:,blockSize:2*blockSize,...]))
         weights = torch.exp(pred[:,2*blockSize:3*blockSize,...])
         weights = weights / torch.sum(weights,dim = 1, keepdim = True)
-        return means, stds, weights
+        return means, stds, weights   
     
-    def loglikelihood(self, x, s=None):     
+    def loglikelihood(self, x, s=None):
         if s is None:
-            s = self.mean
-            
-        x = (x - self.mean)/self.std
-        s = (s - self.mean)/self.std
-        n = x - s
+            s = torch.zeros_like(x)
+        # Separate noise from signal and normalise
         
-        pred = self.forward(n, s)
+        n = x-s
+        
+        n = n - self.data_mean
+        n = n / self.data_std
+        
+        if self.training:
+            pred = self.forward(n)
+        else:
+            pred = self.forward(n).detach()
             
         means, stds, weights = self.get_gaussian_params(pred)
         likelihoods= -0.5*((means-n)/stds)**2 - torch.log(stds) -np.log(2.0*np.pi)*0.5
         temp = torch.max(likelihoods, dim = 1, keepdim = True)[0].detach()
         likelihoods=torch.exp( likelihoods -temp) * weights
-#        likelihoods=torch.exp( likelihoods) * weights
         loglikelihoods = torch.log(torch.sum(likelihoods, dim = 1, keepdim = True))
         loglikelihoods = loglikelihoods + temp 
         return loglikelihoods
@@ -58,7 +66,7 @@ class GMM(pl.LightningModule):
         return out
 
     @torch.no_grad()    
-    def sample(self, s):
+    def sample(self, img_shape, img=None):
         """Sampling function for the autoregressive model.
 
         Args:
@@ -68,39 +76,36 @@ class GMM(pl.LightningModule):
                              should be -1 in the input tensor.
         """
         # Create empty image
-        n = torch.zeros(s.shape, dtype=torch.float).to(self.device) - 1
+        if img is None:
+            img = torch.zeros(img_shape, dtype=torch.float).to(self.device) - 1
         # Generation loop
-        with tqdm(total=s.shape[2], file=sys.stdout) as pbar:
-            for h in range(s.shape[2]):
+        with tqdm(total=img_shape[2], file=sys.stdout) as pbar:
+            for h in range(img_shape[2]):
                 pbar.set_description('done: %d' % (h + 1))
                 pbar.update(1)
-                for w in range(s.shape[3]):
-                    for c in range(s.shape[1]):
+                for w in range(img_shape[3]):
+                    for c in range(img_shape[1]):
+                        # Skip if not to be filled (-1)
+                        if (img[:, c, h, w] != -1).all().item():
+                            continue
                         # For efficiency, we only have to input the upper part of the image
                         # as all other parts will be skipped by the masked convolutions anyway
-                        pred = self.forward(n[:, :, : h + 1, :], s[:, :, : h + 1, :]).detach()
+                        pred = self.forward(img[:, :, : h + 1, :]).detach()
                         means, stds, weights = self.get_gaussian_params(pred)
                         means = means[:,:,h,w][...,np.newaxis,np.newaxis]
                         stds = stds[:,:,h,w][...,np.newaxis,np.newaxis]
                         weights = weights[:,:,h,w][...,np.newaxis,np.newaxis]
                         samp = self.sampleFromMix(means, stds, weights).detach()
-                        n[:, c, h, w] = samp[:,0,0]
+                        img[:, c, h, w] = samp[:,0,0]
 
-        return n*self.std +self.mean
+        return img*self.data_std + self.data_mean
+    
     
     def training_step(self, batch, batch_idx):
-        if self.signal_dep:
-            (x, s) = batch
-            loss = -torch.mean(self.loglikelihood(x, s))
-        else:
-            loss = -torch.mean(self.loglikelihood(batch))
+        loss = -torch.mean(self.loglikelihood(batch))
         self.log("train_nll", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if self.signal_dep:
-            (x, s) = batch
-            loss = -torch.mean(self.loglikelihood(x, s))
-        else:
-            loss = -torch.mean(self.loglikelihood(batch))
-        self.log("val_nll", loss)
+        loss = -torch.mean(self.loglikelihood(batch))
+        self.log("val_nll", loss, prog_bar=True)

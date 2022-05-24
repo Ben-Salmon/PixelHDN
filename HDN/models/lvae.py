@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from torch import optim
 
-from HDN.lib.likelihoods import NoiseModelLikelihood
+from HDN.lib.likelihoods import (GaussianLikelihood, NoiseModelLikelihood)
 from HDN.lib.utils import (crop_img_tensor, pad_img_tensor, Interpolate, free_bits_kl, save_images)
 from HDN.models.lvae_layers import (TopDownLayer, BottomUpLayer,
                           TopDownDeterministicResBlock,
@@ -20,13 +20,14 @@ class LadderVAE(LightningModule):
                  data_std,
                  color_ch=1,
                  noiseModel=None,
+                 gaussian_noise_std=None,
                  blocks_per_layer=5,
                  nonlin='elu',
                  merge_type='residual',
                  batchnorm=True,
                  stochastic_skip=True,
                  n_filters=64,
-                 dropout=0,
+                 dropout=0.2,
                  free_bits=0.0,
                  learn_top_prior=True,
                  img_shape=None,
@@ -43,6 +44,7 @@ class LadderVAE(LightningModule):
         self.save_hyperparameters()
         self.color_ch = color_ch
         self.z_dims = z_dims
+        self.gaussian_noise_std = gaussian_noise_std
         self.blocks_per_layer = blocks_per_layer
         self.n_layers = len(self.z_dims)
         self.stochastic_skip = stochastic_skip
@@ -168,8 +170,11 @@ class LadderVAE(LightningModule):
         self.final_top_down = nn.Sequential(*modules)
 
         # Define likelihood
-        self.likelihood = NoiseModelLikelihood(n_filters, color_ch, data_mean, 
-                                               data_std, noiseModel)
+        if self.gaussian_noise_std is None:
+            self.likelihood = NoiseModelLikelihood(n_filters, color_ch, data_mean, data_std, noiseModel)
+        else:
+            self.likelihood = GaussianLikelihood(n_filters, color_ch)
+            
 
     def forward(self, x):
         img_size = x.size()[2:]
@@ -389,7 +394,11 @@ class LadderVAE(LightningModule):
         x = (batch - self.data_mean) / self.data_std
         model_out = self.forward(x)
         
-        recons_loss = -model_out['ll'].mean()
+        if self.gaussian_noise_std is None:
+            recons_loss = -model_out['ll'].mean()
+        else:
+            recons_loss = -model_out['ll'].mean() / ((self.gaussian_noise_std/self.data_std)**2)
+            
         kl_loss = model_out['kl_loss']/float(x.shape[2]*x.shape[3])
         elbo = recons_loss + kl_loss
         
@@ -400,16 +409,21 @@ class LadderVAE(LightningModule):
         x = (batch - self.data_mean) / self.data_std
         model_out = self.forward(x)
         
-        recons_loss = -model_out['ll'].mean()
+        if self.gaussian_noise_std is None:
+            recons_loss = -model_out['ll'].mean()
+        else:
+            recons_loss = -model_out['ll'].mean() / ((self.gaussian_noise_std/self.data_std)**2)
+            
         kl_loss = model_out['kl_loss']/float(x.shape[2]*x.shape[3])
         elbo = recons_loss + kl_loss
         
         self.log('val_elbo', elbo, prog_bar=True)
-        
+
         # Evaluation mode
         self.eval()
         # Save images
-        save_images(x, self.img_folder, self, 4, self.val_count)
+        if self.val_count % 50 == 0:
+            save_images(x, self.img_folder, self, 4, self.val_count)
         self.val_count += 1
         self.train()
         
