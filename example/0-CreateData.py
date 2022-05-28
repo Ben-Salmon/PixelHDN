@@ -40,3 +40,4 @@ noise = observation - signal
 
 imsave('../data/Convallaria/observation.tif', observation.astype(np.float))
 imsave('../data/Convallaria/noise.tif', noise.astype(np.float))
+imsave('../data/Convallaria/signal.tif', noise.astype(np.float))

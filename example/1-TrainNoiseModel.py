@@ -11,12 +11,11 @@ from torchvision import transforms
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-noise = imread('../data/Convallaria/noise.tif')
+noise = imread('../data/Sadao/noise.tif')
 
-transform = transforms.RandomCrop(64)
-train_loader, val_loader, data_mean, data_std = create_nm_loader(noise, batch_size=8, split=0.9, transform=transform)
+train_loader, val_loader, data_mean, data_std = create_nm_loader(noise, batch_size=32, split=0.8)
 
-checkpoint_path = '../nm_checkpoint/Convallaria'
+checkpoint_path = '../nm_checkpoint/Sadao'
 trainer = pl.Trainer(default_root_dir=os.path.join(checkpoint_path, "PixelCNN"),
                      gpus=1 if str(device).startswith("cuda") else 0,
                      max_epochs=10000,
@@ -27,8 +26,8 @@ trainer = pl.Trainer(default_root_dir=os.path.join(checkpoint_path, "PixelCNN"),
 model = PixelCNN(kernel_size = 7,
                  depth = 5, num_filters = 128,
                  num_gaussians = 10,
-                 data_mean = data_mean,
-                 data_std = data_std).to(device)
+                 data_mean=data_mean,
+                 data_std=data_std).to(device)
 
 trainer.fit(model, train_loader, val_loader)
-trainer.save_checkpoint('../nm_checkpoint/Convallaria/final_params.ckpt')
+trainer.save_checkpoint('../nm_checkpoint/Sadao/final_params.ckpt')

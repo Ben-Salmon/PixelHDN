@@ -25,7 +25,7 @@ class nm_dataset(torch.utils.data.Dataset):
             n = self.transform(n)
                 
         return n
-
+        
 def create_nm_loader(n_data, transform=None, split=0.8, batch_size=32):
     '''
     n_data: numpy array, noise.

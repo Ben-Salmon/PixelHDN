@@ -422,7 +422,7 @@ class LadderVAE(LightningModule):
         # Evaluation mode
         self.eval()
         # Save images
-        if self.val_count % 50 == 0:
+        if self.val_count % 100 == 0:
             save_images(x, self.img_folder, self, 4, self.val_count)
         self.val_count += 1
         self.train()
